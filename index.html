@@ -1,0 +1,821 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SCI Water Monitoring</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0A1015">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Water Monitor">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A1015;
+    --panel:#121A21;
+    --panel-2:#17212A;
+    --border:#223039;
+    --text:#DCE6EC;
+    --muted:#6E8494;
+    --cyan:#22D3C5;
+    --cyan-dim:rgba(34,211,197,0.12);
+    --amber:#F5A93B;
+    --amber-dim:rgba(245,169,59,0.12);
+    --red:#F0555A;
+    --red-dim:rgba(240,85,90,0.12);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(34,211,197,0.06), transparent),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    padding-bottom:60px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  h1,h2,h3{ font-family:'Rajdhani', sans-serif; font-weight:700; letter-spacing:0.01em; }
+  .mono{ font-family:'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky; top:0; z-index:20;
+    background:rgba(10,16,21,0.9);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--border);
+    padding:16px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;
+  }
+  .brand h1{ font-size:20px; color:var(--text); }
+  .brand .eyebrow{ margin-bottom:2px; }
+  .header-right{ display:flex; align-items:center; gap:20px; }
+  .clock{ text-align:right; }
+  .clock .time{ font-size:18px; color:var(--cyan); }
+  .clock .date{ font-size:11px; color:var(--muted); }
+  .live-dot{
+    width:8px; height:8px; border-radius:50%; background:var(--cyan);
+    display:inline-block; margin-right:6px;
+    box-shadow:0 0 0 0 rgba(34,211,197,0.7);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(34,211,197,0.5);}
+    70%{box-shadow:0 0 0 8px rgba(34,211,197,0);}
+    100%{box-shadow:0 0 0 0 rgba(34,211,197,0);}
+  }
+
+  .tabs{ display:flex; gap:4px; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:4px; }
+  .tab-btn{
+    font-family:'Rajdhani', sans-serif; font-weight:600; font-size:14px;
+    background:transparent; border:none; color:var(--muted);
+    padding:8px 18px; border-radius:6px; cursor:pointer; transition:all .15s;
+  }
+  .tab-btn.active{ background:var(--cyan-dim); color:var(--cyan); }
+  .tab-btn:hover:not(.active){ color:var(--text); }
+
+  main{ max-width:1100px; margin:0 auto; padding:24px; }
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+  }
+  .section-title{ font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:12px; }
+
+  /* ---------- Banner ---------- */
+  .banner{
+    display:none;
+    background:var(--amber-dim); border:1px solid var(--amber);
+    color:var(--amber); border-radius:8px; padding:12px 16px; font-size:13px;
+    margin-bottom:20px; line-height:1.5;
+  }
+  .banner code{ background:rgba(0,0,0,0.25); padding:1px 5px; border-radius:4px; }
+
+  /* ---------- Stat cards ---------- */
+  .stat-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:24px; }
+  .stat-card{ padding:20px; position:relative; overflow:hidden; }
+  .stat-card .icon{ font-size:20px; }
+  .stat-label{ font-size:13px; color:var(--muted); margin-top:8px; }
+  .stat-value{ font-size:30px; font-weight:700; margin-top:6px; }
+  .stat-unit{ font-size:14px; color:var(--muted); margin-left:4px; }
+  .status-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    padding:4px 9px; border-radius:20px; margin-top:12px;
+  }
+  .status-ok{ background:var(--cyan-dim); color:var(--cyan); }
+  .status-pending{ background:var(--amber-dim); color:var(--amber); }
+  .status-locked{ background:rgba(110,132,148,0.12); color:var(--muted); }
+  .status-overdue{ background:var(--red-dim); color:var(--red); }
+
+  /* ---------- Submission table ---------- */
+  .table-panel{ padding:20px; margin-bottom:24px; }
+  table{ width:100%; border-collapse:collapse; }
+  th{ text-align:left; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; padding:8px 10px; border-bottom:1px solid var(--border); font-weight:500; }
+  td{ padding:12px 10px; border-bottom:1px solid var(--border); font-family:'JetBrains Mono', monospace; font-size:13px; }
+  tr:last-child td{ border-bottom:none; }
+  .cell-icon{ font-size:16px; }
+
+  /* ---------- Chart ---------- */
+  .chart-panel{ padding:20px; margin-bottom:24px; }
+  .chart-wrap{ overflow-x:auto; }
+  .bar-label{ font-family:'JetBrains Mono', monospace; font-size:10px; fill:var(--muted); }
+  .bar-value{ font-family:'JetBrains Mono', monospace; font-size:10px; fill:var(--text); }
+
+  /* ---------- Activity ---------- */
+  .activity-panel{ padding:20px; }
+  .activity-item{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .activity-item:last-child{ border-bottom:none; }
+  .activity-left{ display:flex; gap:10px; align-items:center; }
+  .activity-badge{ font-family:'JetBrains Mono', monospace; font-size:10px; padding:2px 7px; border-radius:4px; }
+  .activity-meta{ color:var(--muted); font-size:12px; }
+  .empty-state{ color:var(--muted); font-size:13px; text-align:center; padding:24px 0; }
+
+  /* ---------- Submit form ---------- */
+  .form-panel{ padding:28px; max-width:520px; margin:0 auto; }
+  .field{ margin-bottom:18px; }
+  .field label{ display:block; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  select, input, textarea{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:11px 12px; border-radius:7px; font-family:'Inter', sans-serif; font-size:14px;
+  }
+  select:focus, input:focus, textarea:focus{ outline:none; border-color:var(--cyan); }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .meter-row{ display:flex; gap:8px; margin-bottom:10px; align-items:center; }
+  .meter-row input{ flex:1; }
+  .meter-row .meter-name{ flex:1.2; }
+  .remove-row-btn{
+    background:var(--red-dim); color:var(--red); border:1px solid var(--red);
+    width:36px; height:36px; min-width:36px; border-radius:7px; cursor:pointer;
+    font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  }
+  .remove-row-btn:hover{ opacity:0.8; }
+  .add-row-btn{
+    width:100%; background:transparent; border:1px dashed var(--border); color:var(--cyan);
+    font-family:'Rajdhani', sans-serif; font-weight:600; font-size:14px;
+    padding:10px; border-radius:7px; cursor:pointer; margin-top:4px;
+  }
+  .add-row-btn:hover{ border-color:var(--cyan); background:var(--cyan-dim); }
+  .submit-btn{
+    width:100%; background:var(--cyan); color:#04211E; font-family:'Rajdhani', sans-serif;
+    font-weight:700; font-size:16px; letter-spacing:0.02em; border:none;
+    padding:13px; border-radius:7px; cursor:pointer; margin-top:6px; transition:opacity .15s;
+  }
+  .submit-btn:hover{ opacity:0.88; }
+  .submit-btn:disabled{ opacity:0.4; cursor:not-allowed; }
+  .form-msg{ font-size:13px; margin-top:14px; padding:10px 12px; border-radius:7px; display:none; }
+  .form-msg.ok{ background:var(--cyan-dim); color:var(--cyan); display:block; }
+  .form-msg.err{ background:var(--red-dim); color:var(--red); display:block; }
+
+  @media (max-width:720px){
+    .stat-grid{ grid-template-columns:1fr; }
+    .field-row{ grid-template-columns:1fr; }
+    header{ padding:14px 16px; }
+    main{ padding:16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="eyebrow">SCI Plant Operations</div>
+    <h1><span class="live-dot"></span>Water Monitoring</h1>
+  </div>
+  <div class="header-right">
+    <div class="clock">
+      <div class="time mono" id="clockTime">--:--</div>
+      <div class="date" id="clockDate">-- --- ----</div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="submit">Submit Reading</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="banner" id="setupBanner">
+    ⚠ Backend not connected yet — showing demo data. Deploy <code>Code.gs</code> as a Google Apps Script
+    Web App, then paste the URL into <code>APPS_SCRIPT_URL</code> near the top of the script in this file.
+  </div>
+
+  <!-- ================= DASHBOARD TAB ================= -->
+  <div id="tab-dashboard">
+
+    <div class="stat-grid" id="statGrid">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="panel table-panel" id="outgoingMetersPanel">
+      <div class="section-title">Outgoing Supply Flow Meters</div>
+      <table>
+        <thead>
+          <tr><th>Meter ID</th><th>Latest Reading</th><th>Last Shift</th><th>Status</th></tr>
+        </thead>
+        <tbody id="outgoingMetersBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel table-panel">
+      <div class="section-title">Submission Status — Today</div>
+      <table>
+        <thead><tr id="statusTableHead"></tr></thead>
+        <tbody id="statusTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel chart-panel">
+      <div class="section-title">Weekly Usage — Incoming Flowmeter, 07:00-to-07:00 Diff (m³)</div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:10px;">Today's usage will only appear after tomorrow's 07:00 reading is submitted.</div>
+      <div class="chart-wrap">
+        <svg id="weeklyChart" width="100%" height="180" viewBox="0 0 700 180" preserveAspectRatio="xMinYMin meet"></svg>
+      </div>
+    </div>
+
+    <div class="panel activity-panel">
+      <div class="section-title">Latest Activity</div>
+      <div id="activityList"><div class="empty-state">No submissions yet today.</div></div>
+    </div>
+
+  </div>
+
+  <!-- ================= SUBMIT TAB ================= -->
+  <div id="tab-submit" style="display:none;">
+    <div class="panel form-panel">
+      <div class="section-title">Submit Meter Reading</div>
+      <form id="readingForm">
+        <div class="field-row">
+          <div class="field">
+            <label>Category</label>
+            <select id="fCategory" required>
+              <option value="Incoming">Incoming Supply (Admin)</option>
+              <option value="Tank">WT1 Tank Level (Maintenance)</option>
+              <option value="Outgoing">Outgoing Supply</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Shift Time</label>
+            <select id="fShift" required>
+              <option value="07:00">07:00</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" id="meterRowsField" style="display:none;">
+          <label>Flow Meter Readings <span class="mono">(m³)</span></label>
+          <div id="meterRows"></div>
+          <button type="button" class="add-row-btn" id="addMeterRowBtn">+ Add Flow Meter</button>
+        </div>
+        <div class="field" id="singleValueField">
+          <label>Reading Value <span id="fUnitLabel" class="mono">(L)</span></label>
+          <input type="number" step="0.01" id="fValue" placeholder="e.g. 355743">
+        </div>
+        <datalist id="meterOptions"></datalist>
+        <div class="field">
+          <label>Submitted By</label>
+          <input type="text" id="fName" placeholder="Your name" required>
+        </div>
+        <div class="field">
+          <label>Notes (optional)</label>
+          <textarea id="fNotes" rows="2" placeholder="Any remarks..."></textarea>
+        </div>
+        <button type="submit" class="submit-btn" id="submitBtn">Submit Reading</button>
+        <div class="form-msg" id="formMsg"></div>
+      </form>
+    </div>
+  </div>
+
+</main>
+
+<script>
+/* =========================================================
+   CONFIG — paste your Apps Script Web App URL here
+   ========================================================= */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDzBaD6bp7XYaxCe2Vaetl7pZ_WdYpwAfScPMby24M7P2x-BLZTNCwssS6xe-QqHJy/exec";
+
+const SHIFT_TIMES = ["07:00"];
+
+// Incoming and Tank are fixed single instruments.
+// Outgoing is dynamic — one or more flow meters, added freely from the submit form.
+const CATEGORIES = [
+  { key: "Incoming", label: "Incoming Supply", unit: "m³", icon: "🚰" },
+  { key: "Tank",     label: "WT1 Tank Level", unit: "kL", icon: "🛢" }
+];
+const OUTGOING_UNIT = "m³";
+
+function getOutgoingMeters(){
+  const set = new Set();
+  allRows.forEach(r => {
+    if(r.Category === 'Outgoing' && r.MeterID) set.add(r.MeterID);
+  });
+  return Array.from(set).sort();
+}
+
+// Demo data used only when APPS_SCRIPT_URL is empty / unreachable
+const DEMO_ROWS = (() => {
+  const today = new Date().toISOString().slice(0,10);
+  return [
+    { Date: today, Shift: "07:00", Category: "Incoming", MeterID: "", Value: 355743, Unit: "m³", SubmittedBy: "Ahmad", Timestamp: new Date().toISOString() },
+    { Date: today, Shift: "07:00", Category: "Tank",     MeterID: "", Value: 452,     Unit: "kL", SubmittedBy: "Siti",  Timestamp: new Date().toISOString() },
+    { Date: today, Shift: "07:00", Category: "Outgoing", MeterID: "FM-01", Value: 210, Unit: "m³", SubmittedBy: "John", Timestamp: new Date().toISOString() },
+    { Date: today, Shift: "07:00", Category: "Outgoing", MeterID: "FM-02", Value: 145, Unit: "m³", SubmittedBy: "John", Timestamp: new Date().toISOString() }
+  ];
+})();
+
+let allRows = [];
+let usingDemo = false;
+
+/* ---------------- Utility ---------------- */
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function pad(n){ return n.toString().padStart(2,'0'); }
+
+function currentDueShift(now){
+  const mins = now.getHours()*60 + now.getMinutes();
+  let due = null;
+  for(const s of SHIFT_TIMES){
+    const [h,m] = s.split(':').map(Number);
+    if (mins >= h*60+m) due = s;
+  }
+  return due; // null if before first shift
+}
+
+function updateClock(){
+  const now = new Date();
+  document.getElementById('clockTime').textContent =
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  document.getElementById('clockDate').textContent =
+    now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ---------------- Data fetching ---------------- */
+async function fetchData(){
+  if(!APPS_SCRIPT_URL){
+    usingDemo = true;
+    allRows = DEMO_ROWS;
+    document.getElementById('setupBanner').style.display = 'block';
+    render();
+    return;
+  }
+  try{
+    const res = await fetch(APPS_SCRIPT_URL);
+    const json = await res.json();
+    if(json.ok){
+      usingDemo = false;
+      allRows = json.rows;
+      document.getElementById('setupBanner').style.display = 'none';
+    } else {
+      throw new Error(json.error || 'Unknown error');
+    }
+  } catch(err){
+    usingDemo = true;
+    allRows = DEMO_ROWS;
+    const banner = document.getElementById('setupBanner');
+    banner.style.display = 'block';
+    banner.innerHTML = `⚠ Backend not connected — showing demo data.<br>
+      <span class="mono" style="font-size:12px;">Error detail: ${err.message || err}</span>`;
+  }
+  render();
+}
+
+/* ---------------- Rendering ---------------- */
+function render(){
+  renderStatCards();
+  renderOutgoingMeters();
+  renderStatusTable();
+  renderChart();
+  renderActivity();
+  updateMeterOptions();
+}
+
+function latestReadingFor(category){
+  const todays = allRows.filter(r => r.Category === category && r.Date === todayStr());
+  if(todays.length === 0) return null;
+  // latest by shift order
+  todays.sort((a,b) => SHIFT_TIMES.indexOf(a.Shift) - SHIFT_TIMES.indexOf(b.Shift));
+  return todays[todays.length - 1];
+}
+
+function renderStatCards(){
+  const now = new Date();
+  const due = currentDueShift(now);
+  const grid = document.getElementById('statGrid');
+  grid.innerHTML = '';
+
+  CATEGORIES.forEach(cat => {
+    const latest = latestReadingFor(cat.key);
+    const submittedForDue = due ? allRows.some(r => r.Category===cat.key && r.Date===todayStr() && r.Shift===due) : false;
+
+    let statusHtml;
+    if(!due){
+      statusHtml = `<span class="status-pill status-locked">🔒 Not due yet</span>`;
+    } else if(submittedForDue){
+      statusHtml = `<span class="status-pill status-ok">✅ Complete — ${due}</span>`;
+    } else {
+      statusHtml = `<span class="status-pill status-overdue">⚠ Pending — ${due}</span>`;
+    }
+
+    const valueDisplay = latest ? Number(latest.Value).toLocaleString() : '—';
+
+    grid.innerHTML += `
+      <div class="panel stat-card">
+        <div class="icon">${cat.icon}</div>
+        <div class="stat-label">${cat.label}</div>
+        <div class="stat-value mono">${valueDisplay}<span class="stat-unit">${cat.unit}</span></div>
+        ${statusHtml}
+      </div>`;
+  });
+
+  // Outgoing — combined across all active flow meters
+  const meters = getOutgoingMeters();
+  let combinedTotal = 0;
+  let anyLatest = false;
+  meters.forEach(m => {
+    const latest = latestReadingForMeter(m);
+    if(latest){ combinedTotal += Number(latest.Value); anyLatest = true; }
+  });
+
+  const dueOutgoing = due ? meters.length > 0 && meters.every(m =>
+    allRows.some(r => r.Category==='Outgoing' && r.MeterID===m && r.Date===todayStr() && r.Shift===due)
+  ) : false;
+
+  let outStatus;
+  if(meters.length === 0){
+    outStatus = `<span class="status-pill status-locked">No meters yet</span>`;
+  } else if(!due){
+    outStatus = `<span class="status-pill status-locked">🔒 Not due yet</span>`;
+  } else if(dueOutgoing){
+    outStatus = `<span class="status-pill status-ok">✅ Complete — ${due}</span>`;
+  } else {
+    outStatus = `<span class="status-pill status-overdue">⚠ Pending — ${due}</span>`;
+  }
+
+  grid.innerHTML += `
+    <div class="panel stat-card">
+      <div class="icon">💧</div>
+      <div class="stat-label">Outgoing Supply ${meters.length ? `(${meters.length} meter${meters.length>1?'s':''})` : ''}</div>
+      <div class="stat-value mono">${anyLatest ? combinedTotal.toLocaleString() : '—'}<span class="stat-unit">${OUTGOING_UNIT}</span></div>
+      ${outStatus}
+    </div>`;
+}
+
+function latestReadingForMeter(meterId){
+  const todays = allRows.filter(r => r.Category === 'Outgoing' && r.MeterID === meterId && r.Date === todayStr());
+  if(todays.length === 0) return null;
+  todays.sort((a,b) => SHIFT_TIMES.indexOf(a.Shift) - SHIFT_TIMES.indexOf(b.Shift));
+  return todays[todays.length - 1];
+}
+
+function renderOutgoingMeters(){
+  const body = document.getElementById('outgoingMetersBody');
+  const meters = getOutgoingMeters();
+  const now = new Date();
+  const due = currentDueShift(now);
+
+  if(meters.length === 0){
+    body.innerHTML = `<tr><td colspan="4" style="font-family:'Inter',sans-serif; color:var(--muted); text-align:center;">No flow meters recorded yet — add one from the Submit Reading tab.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = meters.map(m => {
+    const latest = latestReadingForMeter(m);
+    const submittedForDue = due ? allRows.some(r => r.Category==='Outgoing' && r.MeterID===m && r.Date===todayStr() && r.Shift===due) : false;
+
+    let status;
+    if(!due) status = `<span class="status-pill status-locked">🔒</span>`;
+    else if(submittedForDue) status = `<span class="status-pill status-ok">✅ ${due}</span>`;
+    else status = `<span class="status-pill status-overdue">⚠ ${due}</span>`;
+
+    return `<tr>
+      <td>${m}</td>
+      <td>${latest ? Number(latest.Value).toLocaleString() : '—'} ${OUTGOING_UNIT}</td>
+      <td>${latest ? latest.Shift : '—'}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderStatusTable(){
+  const now = new Date();
+  const due = currentDueShift(now);
+  const meters = getOutgoingMeters();
+
+  const columns = [
+    { label: 'Incoming Supply', check: (shift) => allRows.some(r => r.Category==='Incoming' && r.Date===todayStr() && r.Shift===shift) },
+    { label: 'WT1 Tank Level', check: (shift) => allRows.some(r => r.Category==='Tank' && r.Date===todayStr() && r.Shift===shift) },
+    ...meters.map(m => ({
+      label: m,
+      check: (shift) => allRows.some(r => r.Category==='Outgoing' && r.MeterID===m && r.Date===todayStr() && r.Shift===shift)
+    }))
+  ];
+
+  const head = document.getElementById('statusTableHead');
+  head.innerHTML = '<th>Shift</th>' + columns.map(c => `<th>${c.label}</th>`).join('');
+
+  const body = document.getElementById('statusTableBody');
+  body.innerHTML = '';
+
+  SHIFT_TIMES.forEach(shift => {
+    const [h,m] = shift.split(':').map(Number);
+    const shiftMins = h*60+m;
+    const nowMins = now.getHours()*60+now.getMinutes();
+
+    let cells = '';
+    columns.forEach(col => {
+      const submitted = col.check(shift);
+      let icon;
+      if(submitted) icon = `<span class="cell-icon">✅</span>`;
+      else if(nowMins >= shiftMins) icon = `<span class="cell-icon">⚠</span>`;
+      else icon = `<span class="cell-icon">🔒</span>`;
+      cells += `<td>${icon}</td>`;
+    });
+
+    body.innerHTML += `<tr><td>${shift}</td>${cells}</tr>`;
+  });
+}
+
+// Incoming meter is a cumulative flowmeter totalizer, read once daily at 07:00.
+// Daily usage = today's 07:00 reading minus yesterday's 07:00 reading.
+function incomingReadingOn(day){
+  const row = allRows.find(r => r.Category === 'Incoming' && r.Date === day && r.Shift === '07:00');
+  return row ? Number(row.Value) : null;
+}
+
+function renderChart(){
+  const svg = document.getElementById('weeklyChart');
+  svg.innerHTML = '';
+
+  // last 7 days including today
+  const days = [];
+  for(let i=6; i>=0; i--){
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0,10));
+  }
+
+  // need one extra day AFTER the range too — today's usage isn't known
+  // until tomorrow's reading comes in (usage(day) = reading(day+1) - reading(day))
+  const lastDay = new Date(days[days.length-1]);
+  lastDay.setDate(lastDay.getDate() + 1);
+  const nextDayStr = lastDay.toISOString().slice(0,10);
+  const readings = [...days, nextDayStr].map(incomingReadingOn);
+
+  const totals = days.map((day, i) => {
+    const thisReading = readings[i];
+    const nextReading = readings[i+1];
+    if(thisReading === null || nextReading === null) return null;
+    const diff = nextReading - thisReading;
+    return diff >= 0 ? diff : null; // negative diff = meter reset / bad data, skip
+  });
+
+  const max = Math.max(...totals.filter(v => v !== null), 1);
+  const chartW = 700, chartH = 180, padBottom = 26, padTop = 16;
+  const barW = (chartW / days.length) * 0.5;
+  const gap = (chartW / days.length);
+
+  days.forEach((day, i) => {
+    const val = totals[i]; // null if a reading is missing that day
+    const barH = val !== null ? (val / max) * (chartH - padBottom - padTop) : 2;
+    const x = i * gap + (gap - barW)/2;
+    const y = chartH - padBottom - barH;
+    const isToday = day === todayStr();
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', barW);
+    rect.setAttribute('height', barH);
+    rect.setAttribute('rx', 3);
+    rect.setAttribute('fill', val === null ? '#2A3A44' : (isToday ? '#22D3C5' : '#1F3540'));
+    svg.appendChild(rect);
+
+    const valText = document.createElementNS('http://www.w3.org/2000/svg','text');
+    valText.setAttribute('x', x + barW/2);
+    valText.setAttribute('y', y - 6);
+    valText.setAttribute('text-anchor','middle');
+    valText.setAttribute('class','bar-value');
+    valText.textContent = val !== null ? Math.round(val).toLocaleString() : '—';
+    svg.appendChild(valText);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x', x + barW/2);
+    label.setAttribute('y', chartH - 6);
+    label.setAttribute('text-anchor','middle');
+    label.setAttribute('class','bar-label');
+    const d = new Date(day);
+    label.textContent = d.toLocaleDateString('en-GB', { weekday:'short' });
+    svg.appendChild(label);
+  });
+}
+
+function renderActivity(){
+  const list = document.getElementById('activityList');
+  const todays = allRows
+    .filter(r => r.Date === todayStr())
+    .sort((a,b) => new Date(b.Timestamp) - new Date(a.Timestamp))
+    .slice(0, 8);
+
+  if(todays.length === 0){
+    list.innerHTML = '<div class="empty-state">No submissions yet today.</div>';
+    return;
+  }
+
+  list.innerHTML = todays.map(r => {
+    const icon = r.Category === 'Outgoing' ? '💧' : (CATEGORIES.find(c => c.key === r.Category)?.icon || '');
+    const catLabel = r.Category === 'Outgoing' && r.MeterID
+      ? `Outgoing Supply · ${r.MeterID}`
+      : (CATEGORIES.find(c => c.key === r.Category)?.label || r.Category);
+    const time = new Date(r.Timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    return `
+      <div class="activity-item">
+        <div class="activity-left">
+          <span class="activity-badge status-ok">${icon} ${catLabel}</span>
+          <span>${Number(r.Value).toLocaleString()} ${r.Unit}</span>
+        </div>
+        <div class="activity-meta">${r.SubmittedBy} · ${r.Shift} shift · ${time}</div>
+      </div>`;
+  }).join('');
+}
+
+/* ---------------- Tabs ---------------- */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('tab-dashboard').style.display = tab === 'dashboard' ? 'block' : 'none';
+    document.getElementById('tab-submit').style.display = tab === 'submit' ? 'block' : 'none';
+  });
+});
+
+/* ---------------- Submit form ---------------- */
+const unitMap = { Incoming: 'm³', Tank: 'kL', Outgoing: 'm³' };
+
+function updateMeterOptions(){
+  const list = document.getElementById('meterOptions');
+  if(!list) return;
+  list.innerHTML = getOutgoingMeters().map(m => `<option value="${m}">`).join('');
+}
+
+function createMeterRow(){
+  const row = document.createElement('div');
+  row.className = 'meter-row';
+  row.innerHTML = `
+    <input type="text" class="meter-name" list="meterOptions" placeholder="e.g. FM-01">
+    <input type="number" step="0.01" class="meter-value" placeholder="Reading">
+    <button type="button" class="remove-row-btn" title="Remove this flow meter">✕</button>
+  `;
+  row.querySelector('.remove-row-btn').addEventListener('click', () => {
+    const container = document.getElementById('meterRows');
+    if(container.children.length > 1){
+      row.remove();
+    } else {
+      row.querySelector('.meter-name').value = '';
+      row.querySelector('.meter-value').value = '';
+    }
+  });
+  return row;
+}
+
+function resetMeterRows(){
+  const container = document.getElementById('meterRows');
+  container.innerHTML = '';
+  container.appendChild(createMeterRow());
+}
+
+document.getElementById('addMeterRowBtn').addEventListener('click', () => {
+  document.getElementById('meterRows').appendChild(createMeterRow());
+});
+
+document.getElementById('fCategory').addEventListener('change', e => {
+  const isOutgoing = e.target.value === 'Outgoing';
+  document.getElementById('fUnitLabel').textContent = `(${unitMap[e.target.value]})`;
+  document.getElementById('meterRowsField').style.display = isOutgoing ? 'block' : 'none';
+  document.getElementById('singleValueField').style.display = isOutgoing ? 'none' : 'block';
+  document.getElementById('fValue').required = !isOutgoing;
+  if(isOutgoing && document.getElementById('meterRows').children.length === 0){
+    resetMeterRows();
+  }
+});
+
+// initialize with one empty row
+resetMeterRows();
+
+document.getElementById('readingForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('formMsg');
+  msg.className = 'form-msg';
+  msg.textContent = '';
+
+  const category = document.getElementById('fCategory').value;
+  const shift = document.getElementById('fShift').value;
+  const submittedBy = document.getElementById('fName').value;
+  const notes = document.getElementById('fNotes').value;
+  const date = todayStr();
+
+  if(!APPS_SCRIPT_URL){
+    msg.className = 'form-msg err';
+    msg.textContent = '⚠ Backend not connected. Set APPS_SCRIPT_URL in the script first — see banner above.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  try{
+    if(category === 'Outgoing'){
+      const entries = Array.from(document.querySelectorAll('#meterRows .meter-row'))
+        .map(row => ({
+          meterId: row.querySelector('.meter-name').value.trim(),
+          value: row.querySelector('.meter-value').value
+        }))
+        .filter(r => r.meterId && r.value !== '');
+
+      if(entries.length === 0){
+        msg.className = 'form-msg err';
+        msg.textContent = '⚠ Add at least one flow meter name and reading.';
+        btn.disabled = false; btn.textContent = 'Submit Reading';
+        return;
+      }
+
+      let successCount = 0;
+      const errors = [];
+      for(const entry of entries){
+        const payload = { date, shift, category: 'Outgoing', meterId: entry.meterId, value: entry.value, unit: 'm³', submittedBy, notes };
+        const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const json = await res.json();
+        if(json.ok) successCount++;
+        else errors.push(`${entry.meterId}: ${json.error || 'failed'}`);
+      }
+
+      if(errors.length === 0){
+        msg.className = 'form-msg ok';
+        msg.textContent = `✅ ${successCount} flow meter reading${successCount>1?'s':''} submitted.`;
+        document.getElementById('readingForm').reset();
+        resetMeterRows();
+        document.getElementById('meterRowsField').style.display = 'none';
+        document.getElementById('singleValueField').style.display = 'block';
+      } else {
+        msg.className = 'form-msg err';
+        msg.textContent = successCount > 0
+          ? `⚠ ${successCount} submitted, but: ${errors.join('; ')}`
+          : `⚠ ${errors.join('; ')}`;
+      }
+    } else {
+      const payload = {
+        date, shift, category, meterId: '',
+        value: document.getElementById('fValue').value,
+        unit: unitMap[category], submittedBy, notes
+      };
+      const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+      const json = await res.json();
+      if(json.ok){
+        msg.className = 'form-msg ok';
+        msg.textContent = '✅ Reading submitted successfully.';
+        document.getElementById('readingForm').reset();
+      } else {
+        msg.className = 'form-msg err';
+        msg.textContent = '⚠ ' + (json.error || 'Submission failed.');
+      }
+    }
+    fetchData();
+  } catch(err){
+    msg.className = 'form-msg err';
+    msg.textContent = '⚠ Network error — could not reach backend.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Submit Reading';
+});
+
+/* ---------------- Init ---------------- */
+fetchData();
+setInterval(fetchData, 30000); // auto-refresh every 30s
+
+/* ---------------- PWA: register service worker ---------------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(err => {
+      console.log('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
