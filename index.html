@@ -104,7 +104,7 @@
   .banner code{ background:rgba(0,0,0,0.25); padding:1px 5px; border-radius:4px; }
 
   /* ---------- Stat cards ---------- */
-  .stat-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:24px; }
+  .stat-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:16px; margin-bottom:24px; }
   .stat-card{ padding:20px; position:relative; overflow:hidden; }
   .stat-card .icon{ font-size:20px; }
   .stat-label{ font-size:13px; color:var(--muted); margin-top:8px; }
@@ -153,9 +153,15 @@
   }
   select:focus, input:focus, textarea:focus{ outline:none; border-color:var(--cyan); }
   .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .meter-row{ display:flex; gap:8px; margin-bottom:10px; align-items:center; }
+  .meter-row{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; padding:12px; background:var(--panel-2); border:1px solid var(--border); border-radius:8px; }
+  .meter-row-top{ display:flex; gap:8px; align-items:center; }
+  .meter-row-readings{ display:flex; gap:8px; align-items:center; }
   .meter-row input{ flex:1; }
   .meter-row .meter-name{ flex:1.2; }
+  .meter-usage-display{
+    font-family:'JetBrains Mono', monospace; font-size:13px; color:var(--cyan);
+    white-space:nowrap; min-width:90px; text-align:right;
+  }
   .remove-row-btn{
     background:var(--red-dim); color:var(--red); border:1px solid var(--red);
     width:36px; height:36px; min-width:36px; border-radius:7px; cursor:pointer;
@@ -224,10 +230,11 @@
       <div class="section-title">Outgoing Supply Flow Meters</div>
       <table>
         <thead>
-          <tr><th>Meter ID</th><th>Latest Reading</th><th>Last Shift</th><th>Status</th></tr>
+          <tr><th>Meter ID</th><th>Today's Usage</th><th>Last Reading</th><th>Last Recorded</th></tr>
         </thead>
         <tbody id="outgoingMetersBody"></tbody>
       </table>
+      <div id="outgoingTotalRow" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-family:'JetBrains Mono', monospace; font-size:14px; color:var(--cyan); text-align:right;"></div>
     </div>
 
     <div class="panel table-panel">
@@ -235,6 +242,22 @@
       <table>
         <thead><tr id="statusTableHead"></tr></thead>
         <tbody id="statusTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel" id="monthlyPanel" style="padding:22px 24px;">
+      <div class="section-title" id="monthlyTitle">Monthly Accumulated — Incoming Supply</div>
+      <div class="stat-value mono" id="monthlyValue" style="font-size:34px;">—<span class="stat-unit">m³</span></div>
+      <div style="font-size:12px; color:var(--muted); margin-top:8px;" id="monthlyNote"></div>
+    </div>
+
+    <div class="panel table-panel">
+      <div class="section-title">Weekly Reading Record — Incoming &amp; Tank</div>
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Incoming (m³)</th><th>Tank Level (kL)</th></tr>
+        </thead>
+        <tbody id="weeklyReadingsBody"></tbody>
       </table>
     </div>
 
@@ -262,20 +285,20 @@
           <div class="field">
             <label>Category</label>
             <select id="fCategory" required>
-              <option value="Incoming">Incoming Supply (Admin)</option>
+              <option value="Incoming">Incoming Supply Flowmeter Reading (Admin)</option>
               <option value="Tank">WT1 Tank Level (Maintenance)</option>
               <option value="Outgoing">Outgoing Supply</option>
             </select>
           </div>
-          <div class="field">
+          <div class="field" id="shiftField">
             <label>Shift Time</label>
-            <select id="fShift" required>
+            <select id="fShift">
               <option value="07:00">07:00</option>
             </select>
           </div>
         </div>
         <div class="field" id="meterRowsField" style="display:none;">
-          <label>Flow Meter Readings <span class="mono">(m³)</span></label>
+          <label>Flow Meter Readings <span class="mono">(m³) — Before &amp; After Supply</span></label>
           <div id="meterRows"></div>
           <button type="button" class="add-row-btn" id="addMeterRowBtn">+ Add Flow Meter</button>
         </div>
@@ -311,7 +334,7 @@ const SHIFT_TIMES = ["07:00"];
 // Incoming and Tank are fixed single instruments.
 // Outgoing is dynamic — one or more flow meters, added freely from the submit form.
 const CATEGORIES = [
-  { key: "Incoming", label: "Incoming Supply", unit: "m³", icon: "🚰" },
+  { key: "Incoming", label: "Incoming Supply Flowmeter Reading", unit: "m³", icon: "🚰" },
   { key: "Tank",     label: "WT1 Tank Level", unit: "kL", icon: "🛢" }
 ];
 const OUTGOING_UNIT = "m³";
@@ -326,13 +349,23 @@ function getOutgoingMeters(){
 
 // Demo data used only when APPS_SCRIPT_URL is empty / unreachable
 const DEMO_ROWS = (() => {
-  const today = new Date().toISOString().slice(0,10);
-  return [
-    { Date: today, Shift: "07:00", Category: "Incoming", MeterID: "", Value: 355743, Unit: "m³", SubmittedBy: "Ahmad", Timestamp: new Date().toISOString() },
-    { Date: today, Shift: "07:00", Category: "Tank",     MeterID: "", Value: 452,     Unit: "kL", SubmittedBy: "Siti",  Timestamp: new Date().toISOString() },
-    { Date: today, Shift: "07:00", Category: "Outgoing", MeterID: "FM-01", Value: 210, Unit: "m³", SubmittedBy: "John", Timestamp: new Date().toISOString() },
-    { Date: today, Shift: "07:00", Category: "Outgoing", MeterID: "FM-02", Value: 145, Unit: "m³", SubmittedBy: "John", Timestamp: new Date().toISOString() }
-  ];
+  const d = (offset) => {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - offset);
+    return dt.toISOString().slice(0,10);
+  };
+  const rows = [];
+  // Incoming + Tank for the last 4 days (including today), stepping ~550-600 m³/day
+  const incBase = 353500;
+  const tankBase = 440;
+  for(let i=3; i>=0; i--){
+    rows.push({ Date: d(i), Shift: "07:00", Category: "Incoming", MeterID: "", Value: incBase + (3-i)*570, Unit: "m³", SubmittedBy: "Ahmad", Timestamp: new Date().toISOString() });
+    rows.push({ Date: d(i), Shift: "07:00", Category: "Tank", MeterID: "", Value: tankBase + (3-i)*3, Unit: "kL", SubmittedBy: "Siti", Timestamp: new Date().toISOString() });
+  }
+  // Outgoing meters — today only, for the flow meter breakdown panel
+  rows.push({ Date: d(0), Shift: "", Category: "Outgoing", MeterID: "FM-01", BeforeReading: 12450, AfterReading: 12660, Value: 210, Unit: "m³", SubmittedBy: "John", Timestamp: new Date().toISOString() });
+  rows.push({ Date: d(0), Shift: "", Category: "Outgoing", MeterID: "FM-02", BeforeReading: 8900, AfterReading: 9045, Value: 145, Unit: "m³", SubmittedBy: "John", Timestamp: new Date().toISOString() });
+  return rows;
 })();
 
 let allRows = [];
@@ -397,6 +430,8 @@ function render(){
   renderStatCards();
   renderOutgoingMeters();
   renderStatusTable();
+  renderMonthlyAccumulated();
+  renderWeeklyReadings();
   renderChart();
   renderActivity();
   updateMeterOptions();
@@ -439,88 +474,57 @@ function renderStatCards(){
         ${statusHtml}
       </div>`;
   });
-
-  // Outgoing — combined across all active flow meters
-  const meters = getOutgoingMeters();
-  let combinedTotal = 0;
-  let anyLatest = false;
-  meters.forEach(m => {
-    const latest = latestReadingForMeter(m);
-    if(latest){ combinedTotal += Number(latest.Value); anyLatest = true; }
-  });
-
-  const dueOutgoing = due ? meters.length > 0 && meters.every(m =>
-    allRows.some(r => r.Category==='Outgoing' && r.MeterID===m && r.Date===todayStr() && r.Shift===due)
-  ) : false;
-
-  let outStatus;
-  if(meters.length === 0){
-    outStatus = `<span class="status-pill status-locked">No meters yet</span>`;
-  } else if(!due){
-    outStatus = `<span class="status-pill status-locked">🔒 Not due yet</span>`;
-  } else if(dueOutgoing){
-    outStatus = `<span class="status-pill status-ok">✅ Complete — ${due}</span>`;
-  } else {
-    outStatus = `<span class="status-pill status-overdue">⚠ Pending — ${due}</span>`;
-  }
-
-  grid.innerHTML += `
-    <div class="panel stat-card">
-      <div class="icon">💧</div>
-      <div class="stat-label">Outgoing Supply ${meters.length ? `(${meters.length} meter${meters.length>1?'s':''})` : ''}</div>
-      <div class="stat-value mono">${anyLatest ? combinedTotal.toLocaleString() : '—'}<span class="stat-unit">${OUTGOING_UNIT}</span></div>
-      ${outStatus}
-    </div>`;
 }
 
-function latestReadingForMeter(meterId){
-  const todays = allRows.filter(r => r.Category === 'Outgoing' && r.MeterID === meterId && r.Date === todayStr());
-  if(todays.length === 0) return null;
-  todays.sort((a,b) => SHIFT_TIMES.indexOf(a.Shift) - SHIFT_TIMES.indexOf(b.Shift));
-  return todays[todays.length - 1];
+function todaysEntriesForMeter(meterId){
+  return allRows
+    .filter(r => r.Category === 'Outgoing' && r.MeterID === meterId && r.Date === todayStr())
+    .sort((a,b) => new Date(a.Timestamp) - new Date(b.Timestamp));
 }
 
 function renderOutgoingMeters(){
   const body = document.getElementById('outgoingMetersBody');
   const meters = getOutgoingMeters();
-  const now = new Date();
-  const due = currentDueShift(now);
 
   if(meters.length === 0){
     body.innerHTML = `<tr><td colspan="4" style="font-family:'Inter',sans-serif; color:var(--muted); text-align:center;">No flow meters recorded yet — add one from the Submit Reading tab.</td></tr>`;
+    document.getElementById('outgoingTotalRow').textContent = '';
     return;
   }
 
-  body.innerHTML = meters.map(m => {
-    const latest = latestReadingForMeter(m);
-    const submittedForDue = due ? allRows.some(r => r.Category==='Outgoing' && r.MeterID===m && r.Date===todayStr() && r.Shift===due) : false;
+  let grandTotal = 0;
+  let anyToday = false;
 
-    let status;
-    if(!due) status = `<span class="status-pill status-locked">🔒</span>`;
-    else if(submittedForDue) status = `<span class="status-pill status-ok">✅ ${due}</span>`;
-    else status = `<span class="status-pill status-overdue">⚠ ${due}</span>`;
+  body.innerHTML = meters.map(m => {
+    const entries = todaysEntriesForMeter(m);
+    const todaysUsage = entries.reduce((sum, r) => sum + Number(r.Value || 0), 0);
+    if(entries.length > 0){ grandTotal += todaysUsage; anyToday = true; }
+    const last = entries.length ? entries[entries.length - 1] : null;
+    const lastTime = last ? new Date(last.Timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }) : '—';
+    const lastReadingText = last && last.BeforeReading !== '' && last.AfterReading !== ''
+      ? `${Number(last.BeforeReading).toLocaleString()} → ${Number(last.AfterReading).toLocaleString()}`
+      : '—';
 
     return `<tr>
       <td>${m}</td>
-      <td>${latest ? Number(latest.Value).toLocaleString() : '—'} ${OUTGOING_UNIT}</td>
-      <td>${latest ? latest.Shift : '—'}</td>
-      <td>${status}</td>
+      <td>${entries.length ? todaysUsage.toLocaleString() : '—'} ${OUTGOING_UNIT}</td>
+      <td>${lastReadingText}</td>
+      <td>${lastTime}</td>
     </tr>`;
   }).join('');
+
+  document.getElementById('outgoingTotalRow').textContent = anyToday
+    ? `Total today: ${grandTotal.toLocaleString()} ${OUTGOING_UNIT} across ${meters.length} meter${meters.length>1?'s':''}`
+    : 'No supply events recorded today yet.';
 }
 
 function renderStatusTable(){
   const now = new Date();
   const due = currentDueShift(now);
-  const meters = getOutgoingMeters();
 
   const columns = [
-    { label: 'Incoming Supply', check: (shift) => allRows.some(r => r.Category==='Incoming' && r.Date===todayStr() && r.Shift===shift) },
-    { label: 'WT1 Tank Level', check: (shift) => allRows.some(r => r.Category==='Tank' && r.Date===todayStr() && r.Shift===shift) },
-    ...meters.map(m => ({
-      label: m,
-      check: (shift) => allRows.some(r => r.Category==='Outgoing' && r.MeterID===m && r.Date===todayStr() && r.Shift===shift)
-    }))
+    { label: 'Incoming Supply Flowmeter Reading', check: (shift) => allRows.some(r => r.Category==='Incoming' && r.Date===todayStr() && r.Shift===shift) },
+    { label: 'WT1 Tank Level', check: (shift) => allRows.some(r => r.Category==='Tank' && r.Date===todayStr() && r.Shift===shift) }
   ];
 
   const head = document.getElementById('statusTableHead');
@@ -555,17 +559,85 @@ function incomingReadingOn(day){
   return row ? Number(row.Value) : null;
 }
 
-function renderChart(){
-  const svg = document.getElementById('weeklyChart');
-  svg.innerHTML = '';
+function tankReadingOn(day){
+  const row = allRows.find(r => r.Category === 'Tank' && r.Date === day && r.Shift === '07:00');
+  return row ? Number(row.Value) : null;
+}
 
-  // last 7 days including today
+function last7Days(){
   const days = [];
   for(let i=6; i>=0; i--){
     const d = new Date();
     d.setDate(d.getDate() - i);
     days.push(d.toISOString().slice(0,10));
   }
+  return days;
+}
+
+function renderWeeklyReadings(){
+  const body = document.getElementById('weeklyReadingsBody');
+  const days = last7Days();
+
+  body.innerHTML = days.map(day => {
+    const inc = incomingReadingOn(day);
+    const tank = tankReadingOn(day);
+    const d = new Date(day);
+    const dateLabel = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) +
+      ` (${d.toLocaleDateString('en-GB', { weekday:'short' })})`;
+    const isToday = day === todayStr();
+    return `<tr ${isToday ? 'style="color:var(--cyan);"' : ''}>
+      <td>${dateLabel}</td>
+      <td>${inc !== null ? inc.toLocaleString() : '—'}</td>
+      <td>${tank !== null ? tank.toLocaleString() : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderMonthlyAccumulated(){
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const monthLabel = now.toLocaleDateString('en-GB', { month:'long', year:'numeric' });
+  document.getElementById('monthlyTitle').textContent = `Monthly Accumulated — Incoming Supply (${monthLabel})`;
+
+  const monthStartStr = new Date(year, month, 1).toISOString().slice(0,10);
+  const todayStrVal = todayStr();
+
+  // baseline: reading on the 1st of the month at 07:00
+  let baseline = incomingReadingOn(monthStartStr);
+  let baselineNote = `as of 1st`;
+
+  // fallback: if no reading exactly on the 1st, use the earliest reading available this month
+  const monthReadings = allRows
+    .filter(r => r.Category === 'Incoming' && r.Shift === '07:00' && r.Date >= monthStartStr && r.Date <= todayStrVal)
+    .sort((a,b) => a.Date.localeCompare(b.Date));
+
+  if(baseline === null && monthReadings.length > 0){
+    baseline = Number(monthReadings[0].Value);
+    baselineNote = `as of ${monthReadings[0].Date} (no reading on the 1st)`;
+  }
+
+  const valueEl = document.getElementById('monthlyValue');
+  const noteEl = document.getElementById('monthlyNote');
+
+  if(baseline === null || monthReadings.length === 0){
+    valueEl.innerHTML = `—<span class="stat-unit">m³</span>`;
+    noteEl.textContent = 'No Incoming readings recorded yet this month.';
+    return;
+  }
+
+  const latest = monthReadings[monthReadings.length - 1];
+  const total = Number(latest.Value) - baseline;
+
+  valueEl.innerHTML = `${total.toLocaleString()}<span class="stat-unit">m³</span>`;
+  noteEl.textContent = `Baseline ${baseline.toLocaleString()} m³ (${baselineNote}) → latest ${Number(latest.Value).toLocaleString()} m³ (as of ${latest.Date})`;
+}
+
+function renderChart(){
+  const svg = document.getElementById('weeklyChart');
+  svg.innerHTML = '';
+
+  const days = last7Days();
 
   // need one extra day AFTER the range too — today's usage isn't known
   // until tomorrow's reading comes in (usage(day) = reading(day+1) - reading(day))
@@ -582,41 +654,93 @@ function renderChart(){
     return diff >= 0 ? diff : null; // negative diff = meter reset / bad data, skip
   });
 
-  const max = Math.max(...totals.filter(v => v !== null), 1);
-  const chartW = 700, chartH = 180, padBottom = 26, padTop = 16;
-  const barW = (chartW / days.length) * 0.5;
-  const gap = (chartW / days.length);
+  const validVals = totals.filter(v => v !== null);
+  const max = Math.max(...validVals, 1);
+  const min = Math.min(...validVals, 0);
+  const chartW = 700, chartH = 180, padBottom = 26, padTop = 24, padSide = 34;
+  const plotW = chartW - padSide*2;
+  const plotH = chartH - padTop - padBottom;
+  const xStep = days.length > 1 ? plotW / (days.length - 1) : 0;
 
-  days.forEach((day, i) => {
-    const val = totals[i]; // null if a reading is missing that day
-    const barH = val !== null ? (val / max) * (chartH - padBottom - padTop) : 2;
-    const x = i * gap + (gap - barW)/2;
-    const y = chartH - padBottom - barH;
-    const isToday = day === todayStr();
+  const points = days.map((day, i) => {
+    const val = totals[i];
+    const x = padSide + i * xStep;
+    const y = val !== null
+      ? padTop + plotH - ((val - min) / (max - min || 1)) * plotH
+      : null;
+    return { day, val, x, y, isToday: day === todayStr() };
+  });
 
-    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('x', x);
-    rect.setAttribute('y', y);
-    rect.setAttribute('width', barW);
-    rect.setAttribute('height', barH);
-    rect.setAttribute('rx', 3);
-    rect.setAttribute('fill', val === null ? '#2A3A44' : (isToday ? '#22D3C5' : '#1F3540'));
-    svg.appendChild(rect);
+  // baseline grid line
+  const baseline = document.createElementNS('http://www.w3.org/2000/svg','line');
+  baseline.setAttribute('x1', padSide);
+  baseline.setAttribute('x2', chartW - padSide);
+  baseline.setAttribute('y1', chartH - padBottom);
+  baseline.setAttribute('y2', chartH - padBottom);
+  baseline.setAttribute('stroke', '#1F2C38');
+  baseline.setAttribute('stroke-width', '1');
+  svg.appendChild(baseline);
 
-    const valText = document.createElementNS('http://www.w3.org/2000/svg','text');
-    valText.setAttribute('x', x + barW/2);
-    valText.setAttribute('y', y - 6);
-    valText.setAttribute('text-anchor','middle');
-    valText.setAttribute('class','bar-value');
-    valText.textContent = val !== null ? Math.round(val).toLocaleString() : '—';
-    svg.appendChild(valText);
+  // draw connecting line segments only between consecutive valid points
+  for(let i = 0; i < points.length - 1; i++){
+    const a = points[i], b = points[i+1];
+    if(a.val === null || b.val === null) continue;
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', a.x);
+    line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x);
+    line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', '#22D3C5');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(line);
+  }
+
+  points.forEach(p => {
+    if(p.val !== null){
+      const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx', p.x);
+      dot.setAttribute('cy', p.y);
+      dot.setAttribute('r', p.isToday ? 5 : 4);
+      dot.setAttribute('fill', p.isToday ? '#22D3C5' : '#0A1015');
+      dot.setAttribute('stroke', '#22D3C5');
+      dot.setAttribute('stroke-width', '2');
+      svg.appendChild(dot);
+
+      const valText = document.createElementNS('http://www.w3.org/2000/svg','text');
+      valText.setAttribute('x', p.x);
+      valText.setAttribute('y', p.y - 12);
+      valText.setAttribute('text-anchor','middle');
+      valText.setAttribute('class','bar-value');
+      valText.textContent = Math.round(p.val).toLocaleString();
+      svg.appendChild(valText);
+    } else {
+      // missing reading — hollow dashed marker sitting on the baseline
+      const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx', p.x);
+      dot.setAttribute('cy', chartH - padBottom);
+      dot.setAttribute('r', 4);
+      dot.setAttribute('fill', 'none');
+      dot.setAttribute('stroke', '#3A4B57');
+      dot.setAttribute('stroke-width', '1.5');
+      dot.setAttribute('stroke-dasharray', '2,2');
+      svg.appendChild(dot);
+
+      const valText = document.createElementNS('http://www.w3.org/2000/svg','text');
+      valText.setAttribute('x', p.x);
+      valText.setAttribute('y', chartH - padBottom - 10);
+      valText.setAttribute('text-anchor','middle');
+      valText.setAttribute('class','bar-label');
+      valText.textContent = '\u2014';
+      svg.appendChild(valText);
+    }
 
     const label = document.createElementNS('http://www.w3.org/2000/svg','text');
-    label.setAttribute('x', x + barW/2);
+    label.setAttribute('x', p.x);
     label.setAttribute('y', chartH - 6);
     label.setAttribute('text-anchor','middle');
     label.setAttribute('class','bar-label');
-    const d = new Date(day);
+    const d = new Date(p.day);
     label.textContent = d.toLocaleDateString('en-GB', { weekday:'short' });
     svg.appendChild(label);
   });
@@ -640,13 +764,19 @@ function renderActivity(){
       ? `Outgoing Supply · ${r.MeterID}`
       : (CATEGORIES.find(c => c.key === r.Category)?.label || r.Category);
     const time = new Date(r.Timestamp).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    const valueText = r.Category === 'Outgoing' && r.BeforeReading !== '' && r.AfterReading !== ''
+      ? `${Number(r.BeforeReading).toLocaleString()} → ${Number(r.AfterReading).toLocaleString()} (used ${Number(r.Value).toLocaleString()} ${r.Unit})`
+      : `${Number(r.Value).toLocaleString()} ${r.Unit}`;
+    const metaText = r.Category === 'Outgoing'
+      ? `${r.SubmittedBy} · ${time}`
+      : `${r.SubmittedBy} · ${r.Shift} shift · ${time}`;
     return `
       <div class="activity-item">
         <div class="activity-left">
           <span class="activity-badge status-ok">${icon} ${catLabel}</span>
-          <span>${Number(r.Value).toLocaleString()} ${r.Unit}</span>
+          <span>${valueText}</span>
         </div>
-        <div class="activity-meta">${r.SubmittedBy} · ${r.Shift} shift · ${time}</div>
+        <div class="activity-meta">${metaText}</div>
       </div>`;
   }).join('');
 }
@@ -675,17 +805,47 @@ function createMeterRow(){
   const row = document.createElement('div');
   row.className = 'meter-row';
   row.innerHTML = `
-    <input type="text" class="meter-name" list="meterOptions" placeholder="e.g. FM-01">
-    <input type="number" step="0.01" class="meter-value" placeholder="Reading">
-    <button type="button" class="remove-row-btn" title="Remove this flow meter">✕</button>
+    <div class="meter-row-top">
+      <input type="text" class="meter-name" list="meterOptions" placeholder="Meter ID e.g. FM-01">
+      <button type="button" class="remove-row-btn" title="Remove this flow meter">✕</button>
+    </div>
+    <div class="meter-row-readings">
+      <input type="number" step="0.01" class="meter-before" placeholder="Before reading">
+      <input type="number" step="0.01" class="meter-after" placeholder="After reading">
+      <span class="meter-usage-display">— m³</span>
+    </div>
   `;
+
+  const beforeInput = row.querySelector('.meter-before');
+  const afterInput = row.querySelector('.meter-after');
+  const usageDisplay = row.querySelector('.meter-usage-display');
+
+  function updateUsage(){
+    const b = parseFloat(beforeInput.value);
+    const a = parseFloat(afterInput.value);
+    if(!isNaN(b) && !isNaN(a) && a >= b){
+      usageDisplay.textContent = `${(a - b).toLocaleString()} m³`;
+      usageDisplay.style.color = 'var(--cyan)';
+    } else if(!isNaN(b) && !isNaN(a) && a < b){
+      usageDisplay.textContent = `⚠ After < Before`;
+      usageDisplay.style.color = 'var(--red)';
+    } else {
+      usageDisplay.textContent = '— m³';
+      usageDisplay.style.color = 'var(--muted)';
+    }
+  }
+  beforeInput.addEventListener('input', updateUsage);
+  afterInput.addEventListener('input', updateUsage);
+
   row.querySelector('.remove-row-btn').addEventListener('click', () => {
     const container = document.getElementById('meterRows');
     if(container.children.length > 1){
       row.remove();
     } else {
+      beforeInput.value = '';
+      afterInput.value = '';
       row.querySelector('.meter-name').value = '';
-      row.querySelector('.meter-value').value = '';
+      updateUsage();
     }
   });
   return row;
@@ -706,6 +866,7 @@ document.getElementById('fCategory').addEventListener('change', e => {
   document.getElementById('fUnitLabel').textContent = `(${unitMap[e.target.value]})`;
   document.getElementById('meterRowsField').style.display = isOutgoing ? 'block' : 'none';
   document.getElementById('singleValueField').style.display = isOutgoing ? 'none' : 'block';
+  document.getElementById('shiftField').style.display = isOutgoing ? 'none' : 'block';
   document.getElementById('fValue').required = !isOutgoing;
   if(isOutgoing && document.getElementById('meterRows').children.length === 0){
     resetMeterRows();
@@ -742,13 +903,22 @@ document.getElementById('readingForm').addEventListener('submit', async (e) => {
       const entries = Array.from(document.querySelectorAll('#meterRows .meter-row'))
         .map(row => ({
           meterId: row.querySelector('.meter-name').value.trim(),
-          value: row.querySelector('.meter-value').value
+          before: row.querySelector('.meter-before').value,
+          after: row.querySelector('.meter-after').value
         }))
-        .filter(r => r.meterId && r.value !== '');
+        .filter(r => r.meterId && r.before !== '' && r.after !== '');
 
       if(entries.length === 0){
         msg.className = 'form-msg err';
-        msg.textContent = '⚠ Add at least one flow meter name and reading.';
+        msg.textContent = '⚠ Add at least one flow meter with both Before and After readings.';
+        btn.disabled = false; btn.textContent = 'Submit Reading';
+        return;
+      }
+
+      const invalid = entries.filter(en => Number(en.after) < Number(en.before));
+      if(invalid.length > 0){
+        msg.className = 'form-msg err';
+        msg.textContent = `⚠ ${invalid.map(en => en.meterId).join(', ')}: After reading can't be less than Before reading.`;
         btn.disabled = false; btn.textContent = 'Submit Reading';
         return;
       }
@@ -756,7 +926,12 @@ document.getElementById('readingForm').addEventListener('submit', async (e) => {
       let successCount = 0;
       const errors = [];
       for(const entry of entries){
-        const payload = { date, shift, category: 'Outgoing', meterId: entry.meterId, value: entry.value, unit: 'm³', submittedBy, notes };
+        const usage = Number(entry.after) - Number(entry.before);
+        const payload = {
+          date, shift: '', category: 'Outgoing', meterId: entry.meterId,
+          beforeReading: entry.before, afterReading: entry.after,
+          value: usage, unit: 'm³', submittedBy, notes
+        };
         const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
         const json = await res.json();
         if(json.ok) successCount++;
