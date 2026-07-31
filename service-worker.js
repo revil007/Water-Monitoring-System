@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sci-water-monitor-v1';
+const CACHE_NAME = 'sci-water-monitor-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -23,19 +23,18 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-first for the Apps Script API (always want fresh data when online),
-// cache-first for the app shell (so the dashboard UI itself still opens offline).
+// Network-first for everything: always try to fetch the latest version first
+// (so GitHub Pages updates show up immediately), only falling back to the
+// cached copy if the network request fails (e.g. no internet — offline mode).
 self.addEventListener('fetch', (event) => {
-  const url = event.request.url;
-
-  if (url.includes('script.google.com')) {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        // keep a fresh copy in the cache for offline fallback later
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
