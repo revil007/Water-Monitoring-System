@@ -1119,7 +1119,7 @@ function categoryDisplayLabel(cat){
   return cat;
 }
 
-function renderHistoryTable(rows){
+function renderHistoryTable(rows, fullDataset){
   const body = document.getElementById('historyTableBody');
   if(rows.length === 0){
     body.innerHTML = `<tr><td colspan="7" style="font-family:'Inter',sans-serif; color:var(--muted); text-align:center;">No records found for this filter.</td></tr>`;
@@ -1135,6 +1135,18 @@ function renderHistoryTable(rows){
     let readingText;
     if(r.Category === 'Outgoing' && r.BeforeReading !== '' && r.AfterReading !== '' && r.BeforeReading !== undefined){
       readingText = `${Number(r.BeforeReading).toLocaleString()} → ${Number(r.AfterReading).toLocaleString()} (used ${Number(r.Value).toLocaleString()} ${r.Unit})`;
+    } else if(r.Category === 'Incoming' && r.Shift === '07:00'){
+      // usage = this reading minus the previous calendar day's 07:00 reading
+      const prevDay = new Date(r.Date);
+      prevDay.setDate(prevDay.getDate() - 1);
+      const prevDayStr = localDateStr(prevDay);
+      const prevRow = fullDataset.find(x => x.Category === 'Incoming' && x.Shift === '07:00' && x.Date === prevDayStr);
+      if(prevRow){
+        const usage = Number(r.Value) - Number(prevRow.Value);
+        readingText = `${Number(r.Value).toLocaleString()} ${r.Unit} (usage: ${usage >= 0 ? usage.toLocaleString() : '—'} ${r.Unit})`;
+      } else {
+        readingText = `${Number(r.Value).toLocaleString()} ${r.Unit} (usage: —)`;
+      }
     } else {
       readingText = `${Number(r.Value).toLocaleString()} ${r.Unit}`;
     }
@@ -1181,7 +1193,7 @@ async function runHistorySearch(){
   });
 
   msgEl.textContent = `${filtered.length} record${filtered.length !== 1 ? 's' : ''} found.`;
-  renderHistoryTable(filtered);
+  renderHistoryTable(filtered, rows);
 }
 
 document.getElementById('hSearchBtn').addEventListener('click', runHistorySearch);
