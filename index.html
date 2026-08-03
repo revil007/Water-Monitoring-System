@@ -1136,16 +1136,17 @@ function renderHistoryTable(rows, fullDataset){
     if(r.Category === 'Outgoing' && r.BeforeReading !== '' && r.AfterReading !== '' && r.BeforeReading !== undefined){
       readingText = `${Number(r.BeforeReading).toLocaleString()} → ${Number(r.AfterReading).toLocaleString()} (used ${Number(r.Value).toLocaleString()} ${r.Unit})`;
     } else if(r.Category === 'Incoming' && r.Shift === '07:00'){
-      // usage = this reading minus the previous calendar day's 07:00 reading
-      const prevDay = new Date(r.Date);
-      prevDay.setDate(prevDay.getDate() - 1);
-      const prevDayStr = localDateStr(prevDay);
-      const prevRow = fullDataset.find(x => x.Category === 'Incoming' && x.Shift === '07:00' && x.Date === prevDayStr);
-      if(prevRow){
-        const usage = Number(r.Value) - Number(prevRow.Value);
+      // usage for THIS row's date = next day's reading minus this reading
+      // (matches the dashboard chart convention, so it lines up with the Date column)
+      const nextDay = new Date(r.Date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = localDateStr(nextDay);
+      const nextRow = fullDataset.find(x => x.Category === 'Incoming' && x.Shift === '07:00' && x.Date === nextDayStr);
+      if(nextRow){
+        const usage = Number(nextRow.Value) - Number(r.Value);
         readingText = `${Number(r.Value).toLocaleString()} ${r.Unit} (usage: ${usage >= 0 ? usage.toLocaleString() : '—'} ${r.Unit})`;
       } else {
-        readingText = `${Number(r.Value).toLocaleString()} ${r.Unit} (usage: —)`;
+        readingText = `${Number(r.Value).toLocaleString()} ${r.Unit} (usage: pending next reading)`;
       }
     } else {
       readingText = `${Number(r.Value).toLocaleString()} ${r.Unit}`;
