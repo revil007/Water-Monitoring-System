@@ -561,7 +561,7 @@ function renderStatCards(){
     const valueDisplay = latest ? Number(latest.Value).toLocaleString() : '—';
 
     let headerLabel=cat.key==='Incoming'?'Incoming Flowmeter':'WT1 Tank Level';
-    let badge='🟢 NORMAL', badgeClass='status-ok', border='#223039';
+    let badge='🟢 NORMAL', badgeClass='status-ok', border='#223039', progressColor='#3DD68C';
     if(cat.key==='Incoming'){
       const days=last7Days();
       const idx=days.length-2;
@@ -575,12 +575,27 @@ function renderStatCards(){
     } else {
       const lvl=latest?Number(latest.Value):null;
       if(lvl!==null){
-        if(lvl<150){badge='🔴 CRITICAL LEVEL'; badgeClass='status-overdue'; border='var(--red)';}
-        else if(lvl<300){badge='🟡 LOW LEVEL'; badgeClass='status-low'; border='var(--amber)';}
-        else {border='#3DD68C';}
+        if(lvl<1000){
+          badge='🔴 CRITICAL LEVEL';
+          badgeClass='status-overdue';
+          border='var(--red)';
+          progressColor='var(--red)';
+        }else if(lvl<=1200){
+          badge='🟠 LOW LEVEL';
+          badgeClass='status-low';
+          border='var(--amber)';
+          progressColor='var(--amber)';
+        }else{
+          border='#3DD68C';
+          progressColor='#3DD68C';
+        }
       }
     }
-    const progress=cat.key==='Tank'&&latest?`<div style="margin-top:10px;background:#1f2c38;border-radius:5px;height:8px;"><div style="height:8px;width:${Math.min((Number(latest.Value)/1500)*100,100)}%;background:#22D3C5;border-radius:5px;"></div></div>`:'';
+    const tankPct = cat.key==='Tank'&&latest ? Math.min((Number(latest.Value)/1500)*100,100) : 0;
+    const progress=cat.key==='Tank'&&latest?`<div style="margin-top:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;"><span>Capacity</span><span class="mono" style="color:${progressColor}">${tankPct.toFixed(1)}%</span></div>
+      <div style="background:#1f2c38;border-radius:5px;height:8px;"><div style="height:8px;width:${tankPct}%;background:${progressColor};border-radius:5px;"></div></div>
+    </div>`:'';
     grid.innerHTML += `
       <div class="panel stat-card" style="border-color:${border}">
         <div style="display:flex;justify-content:space-between;align-items:center;">
