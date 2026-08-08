@@ -225,6 +225,36 @@
   gap:4px;
 }
 
+  .usage-records{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    margin-top:16px;
+  }
+  .usage-record-card{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px 14px;
+  }
+  .usage-record-label{
+    font-size:11px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  .usage-record-value{
+    font-family:'JetBrains Mono', monospace;
+    font-size:20px;
+    font-weight:700;
+    margin-top:5px;
+  }
+  .usage-record-date{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:3px;
+  }
+
 
   @media (max-width:720px){
     .history-filters .field{ min-width:100%; }
@@ -310,6 +340,18 @@
         <span>🟢 Normal (300–550)</span>
         <span>🟡 Low (&lt;300)</span>
         <span>🔴 High (&gt;550)</span>
+      </div>
+      <div class="usage-records" id="usageRecords">
+        <div class="usage-record-card">
+          <div class="usage-record-label">Highest Usage Ever</div>
+          <div class="usage-record-value" id="highestUsageEver">—</div>
+          <div class="usage-record-date" id="highestUsageDate">No complete usage record yet</div>
+        </div>
+        <div class="usage-record-card">
+          <div class="usage-record-label">Lowest Usage Ever</div>
+          <div class="usage-record-value" id="lowestUsageEver">—</div>
+          <div class="usage-record-date" id="lowestUsageDate">No complete usage record yet</div>
+        </div>
       </div>
     </div>
 
@@ -497,7 +539,7 @@ async function fetchData(){
     return;
   }
   try{
-    const res = await fetch(`${APPS_SCRIPT_URL}?days=210`);
+    const res = await fetch(`${APPS_SCRIPT_URL}?all=true`);
     const json = await res.json();
     if(json.ok){
       usingDemo = false;
@@ -523,6 +565,7 @@ function render(){
   renderOutgoingMeters();
   renderMonthlyAccumulated();
   renderChart();
+  renderUsageRecords();
   renderActivity();
   updateMeterOptions();
 }
@@ -783,6 +826,58 @@ function renderMonthlyBarsChart(){
   }).join('');
 }
 
+
+
+function getIncomingUsageHistory(){
+  const rows = allRows
+    .filter(r => r.Category === 'Incoming' && r.Shift === '07:00' && r.Date)
+    .map(r => ({ date:r.Date, reading:Number(r.Value) }))
+    .filter(r => Number.isFinite(r.reading))
+    .sort((a,b) => a.date.localeCompare(b.date));
+
+  const usages = [];
+  for(let i=0; i < rows.length - 1; i++){
+    const usage = rows[i+1].reading - rows[i].reading;
+    if(usage >= 0){
+      usages.push({ date:rows[i].date, usage });
+    }
+  }
+  return usages;
+}
+
+function formatRecordDate(dateStr){
+  if(!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('en-GB', {
+    day:'2-digit', month:'short', year:'numeric'
+  });
+}
+
+function renderUsageRecords(){
+  const history = getIncomingUsageHistory();
+  const highEl = document.getElementById('highestUsageEver');
+  const highDateEl = document.getElementById('highestUsageDate');
+  const lowEl = document.getElementById('lowestUsageEver');
+  const lowDateEl = document.getElementById('lowestUsageDate');
+
+  if(!highEl || !lowEl) return;
+
+  if(history.length === 0){
+    highEl.textContent = '—';
+    lowEl.textContent = '—';
+    highDateEl.textContent = 'No complete usage record yet';
+    lowDateEl.textContent = 'No complete usage record yet';
+    return;
+  }
+
+  const highest = history.reduce((best, item) => item.usage > best.usage ? item : best, history[0]);
+  const lowest = history.reduce((best, item) => item.usage < best.usage ? item : best, history[0]);
+
+  highEl.textContent = `${Math.round(highest.usage).toLocaleString()} m³`;
+  highDateEl.textContent = `Usage for ${formatRecordDate(highest.date)}`;
+
+  lowEl.textContent = `${Math.round(lowest.usage).toLocaleString()} m³`;
+  lowDateEl.textContent = `Usage for ${formatRecordDate(lowest.date)}`;
+}
 
 function renderChart(){
   const svg = document.getElementById('weeklyChart');
